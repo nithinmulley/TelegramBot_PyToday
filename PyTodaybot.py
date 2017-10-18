@@ -6,7 +6,7 @@ from pytz import timezone
 from pytz import utc
 import re
 
-token = ''
+token = '425349659:AAHF19iJ1hvVC_ihXQo2TAAPgLOY6biTjAU'
 url = 'https://api.telegram.org/bot{token}/'.format(**locals())
 temp_user_list =[]
 
@@ -55,6 +55,8 @@ def get_hydpy_meetup(chat_id):
                     'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +\
                     'RSVP Here: ' + parsed_json['results'][i]['event_url'])
             send_updates(chat_id, text)
+    else:
+    	send_updates(chat_id, 'There are no new Meetups scheduled :(')
 
 def commander(updates):
     for update in updates['result']:
@@ -74,7 +76,10 @@ def commander(updates):
 def main():
     offset = None
     while True:
-        all_updates_json = get_updates(offset)
+    	try:
+    		all_updates_json = get_updates(offset)
+    	except:
+    		pass
         if len(all_updates_json['result']) > 0:
             offset = last_update_id(all_updates_json) + 1
             #echo_all(all_updates_json)
