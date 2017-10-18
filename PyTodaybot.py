@@ -50,13 +50,18 @@ def get_hydpy_meetup(chat_id):
         for i in range(len(parsed_json['results'])):
             utc_dt = utc.localize(datetime.utcfromtimestamp(parsed_json['results'][i]['time']//1000))
             ist_dt = utc_dt.astimezone(timezone('Asia/Kolkata'))
+            try:
+                venue = parsed_json['results'][i]['venue']['name']
+            except:
+                venue = 'Location unavailable'
             text = ('Meetup Name: ' + parsed_json['results'][i]['name'] + '\n' +\
-                    'Location: ' + parsed_json['results'][i]['venue']['name'] + '\n' +\
+                    'Location: ' + venue + '\n' +\
                     'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +\
                     'RSVP Here: ' + parsed_json['results'][i]['event_url'])
             send_updates(chat_id, text)
     else:
-    	send_updates(chat_id, 'There are no new Meetups scheduled :(')
+        send_updates(chat_id, 'There are no new Meetups scheduled :(')
+
 
 def commander(updates):
     for update in updates['result']:
@@ -76,10 +81,10 @@ def commander(updates):
 def main():
     offset = None
     while True:
-    	try:
-    		all_updates_json = get_updates(offset)
-    	except:
-    		pass
+        try:
+            all_updates_json = get_updates(offset)
+        except:
+            pass
         if len(all_updates_json['result']) > 0:
             offset = last_update_id(all_updates_json) + 1
             #echo_all(all_updates_json)
@@ -88,3 +93,12 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# if len(parsed_content['result'])>0:
+#     for i in parsed_content['result']:
+#         if parsed_content['result'][0]['message']['from']['username'] not in temp_user_list:
+#             temp_user_list.append(parsed_content['result'][0]['message']['from']['username'])
+#             first_name = parsed_content['result'][0]['message']['from']['first_name']
+#             send_text='Hello {first_name}'.format(**locals())
+#             send_updates(parsed_content['result'][0]['message']['chat']['id'],send_text)
+#         send_updates(parsed_content['result'][0]['message']['chat']['id'],'Howdy!')
