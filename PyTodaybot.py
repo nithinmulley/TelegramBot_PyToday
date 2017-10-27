@@ -8,19 +8,29 @@ import re
 
 token = '425349659:AAHF19iJ1hvVC_ihXQo2TAAPgLOY6biTjAU'
 url = 'https://api.telegram.org/bot{token}/'.format(**locals())
-temp_user_list =[]
+temp_user_list = []
+
 
 def get_url(url):
     response = requests.get(url)
     return json.loads(response.text)
 
-def send_updates(chat_id,text):
+
+def send_updates(chat_id, text):
     return get_url(url+'sendMessage?chat_id={chat_id}&text={text}'.format(**locals()))
+
+
+def send_inline(answer):
+    return requests.post(url=r'https://api.telegram.org/bot425349659:AAHF19iJ1hvVC_ihXQo2TAAPgLOY6biTjAU'
+                              '/answerInlineQuery',
+                         params=answer)
+
 
 def get_updates(offset=None):
     if offset:
         return get_url(url+'getUpdates?timeout=100'+"&offset={offset}".format(**locals()))
     return get_url(url+'getUpdates?timeout=100')
+
 
 def last_update_id(updates):
     update_ids = []
@@ -28,68 +38,121 @@ def last_update_id(updates):
         update_ids.append(int(update['update_id']))
     return max(update_ids)
 
+
 def echo_all(updates):
     for update in updates['result']:
         try:
             chat_id = update['message']['chat']['id']
             text = update['message']['text']
             from_id = update['message']['from']['username']
-            #print('Received from ' + from_id + ' > ' + text)
+            # print('Received from ' + from_id + ' > ' + text)
             send_updates(chat_id, text)
             print('Replied to ' + from_id + ' > ' + text)
         except Exception as e:
             print(e)
 
+
 def get_hydpy_meetup(chat_id):
-    response = requests.get('https://api.meetup.com/2/events?offset=0&format=json&limited_events=False'\
-                            '&group_urlname=Hyderabad-Python-Meetup-Group&photo-host=public&page=20&fields='\
-                            '&order=time&desc=false&status=upcoming&sig_id=8101615&sig=47907134e718c42220aa2e8a7de154be8757318b')
+    response = requests.get('https://api.meetup.com/2/events?offset=0&format=json&limited_events=False'
+                            '&group_urlname=Hyderabad-Python-Meetup-Group&photo-host=public&page=20&fields=&order=time'
+                            '&desc=false&status=upcoming&sig_id=8101615&sig=47907134e718c42220aa2e8a7de154be8757318b')
     parsed_json = json.loads(response.text)
-    if len(parsed_json['results'])>0:
+    if len(parsed_json['results']) > 0:
         send_updates(chat_id, 'I noticed there are ' + str(len(parsed_json['results'])) + ' Meetups')
         for i in range(len(parsed_json['results'])):
             utc_dt = utc.localize(datetime.utcfromtimestamp(parsed_json['results'][i]['time']//1000))
             ist_dt = utc_dt.astimezone(timezone('Asia/Kolkata'))
             try:
                 venue = parsed_json['results'][i]['venue']['name']
-            except:
+            except Exception as e:
+                print(e)
                 venue = 'Location unavailable'
-            text = ('Meetup Name: ' + parsed_json['results'][i]['name'] + '\n' +\
-                    'Location: ' + venue + '\n' +\
-                    'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +\
+            text = ('Meetup Name: ' + parsed_json['results'][i]['name'] + '\n' +
+                    'Location: ' + venue + '\n' +
+                    'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +
                     'RSVP Here: ' + parsed_json['results'][i]['event_url'])
             send_updates(chat_id, text)
     else:
         send_updates(chat_id, 'There are no new Meetups scheduled :(')
 
 
+def get_inline_hydpy_meetup():
+    response = requests.get('https://api.meetup.com/2/events?offset=0&format=json&limited_events=False'
+                            '&group_urlname=Hyderabad-Python-Meetup-Group&photo-host=public&page=20&fields=&order=time'
+                            '&desc=false&status=upcoming&sig_id=8101615&sig=47907134e718c42220aa2e8a7de154be8757318b')
+    parsed_json = json.loads(response.text)
+    meetup_details = []
+    if len(parsed_json['results']) > 0:
+        for i in range(len(parsed_json['results'])):
+            utc_dt = utc.localize(datetime.utcfromtimestamp(parsed_json['results'][i]['time']//1000))
+            ist_dt = utc_dt.astimezone(timezone('Asia/Kolkata'))
+            try:
+                venue = parsed_json['results'][i]['venue']['name']
+            except Exception as e:
+                print(e)
+                venue = 'Location unavailable'
+            text = ('Meetup Name: ' + parsed_json['results'][i]['name'] + '\n' +
+                    'Location: ' + venue + '\n' +
+                    'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +
+                    'RSVP Here: ' + parsed_json['results'][i]['event_url'])
+            meetup_details.append({'meetname': parsed_json['results'][i]['name'],
+                                   'location': venue,
+                                   'time': str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')),
+                                   'url': parsed_json['results'][i]['event_url'],
+                                   'text': text})
+    return meetup_details
+
+
 def commander(updates):
     for update in updates['result']:
-        try:
-            chat_id = update['message']['chat']['id']
-            text = update['message']['text']
-            from_id = update['message']['from']['username']
-            print('Received from ' + from_id + ' > ' + text)
-            if re.search('hydpy',text,re.IGNORECASE):
-                get_hydpy_meetup(chat_id)
-                print('Replied to ' + from_id + ' > ' + 'Meetup Details')
-            else:
-                echo_all(updates)
-        except Exception as e:
-            print(e)
+        if 'inline_query' in update:
+            inline_query = update['inline_query']
+            inline_query_id = inline_query['id']
+            query = inline_query['query']
+            try:
+                from_id = inline_query['from']['username']
+                print('Query Received from ' + from_id + ' > ' + query)
+            except Exception as e:
+                print(e)
+            if re.search('hydpy', query, re.IGNORECASE):
+                meetup_list = get_inline_hydpy_meetup()
+                results = []
+                for j, i in enumerate(meetup_list):
+                    results.append({'type': 'article',
+                                    'id': j,
+                                    'title': i['meetname'],
+                                    'parse_mode': 'Markdown',
+                                    'message_text': i['text'],
+                                    'description': i['url']})
+                answer = {'inline_query_id': inline_query_id, 'results': json.dumps(results), 'cache_time': '30'}
+                send_inline(answer)
+        else:
+            try:
+                chat_id = update['message']['chat']['id']
+                text = update['message']['text']
+                from_id = update['message']['from']['username']
+                print('Received from ' + from_id + ' > ' + text)
+                if re.search('hydpy', text, re.IGNORECASE):
+                    get_hydpy_meetup(chat_id)
+                    print('Replied to ' + from_id + ' > ' + 'Meetup Details')
+                else:
+                    echo_all(updates)
+            except Exception as e:
+                print(e)
+
 
 def main():
     offset = None
     while True:
         try:
             all_updates_json = get_updates(offset)
-        except:
-            pass
-        if len(all_updates_json['result']) > 0:
-            offset = last_update_id(all_updates_json) + 1
-            #echo_all(all_updates_json)
-            commander(all_updates_json)
+            if len(all_updates_json['result']) > 0:
+                offset = last_update_id(all_updates_json) + 1
+                commander(all_updates_json)
+        except Exception as e:
+            print(e)
         time.sleep(0.4)
+
 
 if __name__ == '__main__':
     main()
