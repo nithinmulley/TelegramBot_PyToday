@@ -16,6 +16,8 @@ with open(token_file) as f:
 
 
 tg_url = 'https://api.telegram.org/bot{token}/'.format(**locals())
+meetup_dict = {'hydpy': 'Hyderabad-Python-Meetup-Group',
+               'coderplex': 'coderplex'}
 
 
 def get_url(url):
@@ -57,57 +59,6 @@ def echo_all(updates):
             print(e)
 
 
-def get_hydpy_meetup(chat_id):
-    response = requests.get('https://api.meetup.com/2/events?offset=0&format=json&limited_events=False'
-                            '&group_urlname=Hyderabad-Python-Meetup-Group&photo-host=public&page=20&fields=&order=time'
-                            '&desc=false&status=upcoming&sig_id=8101615&sig=47907134e718c42220aa2e8a7de154be8757318b')
-    parsed_json = json.loads(response.text)
-    if len(parsed_json['results']) > 0:
-        send_updates(chat_id, 'I noticed there are ' + str(len(parsed_json['results'])) + ' Meetups')
-        for i in range(len(parsed_json['results'])):
-            utc_dt = utc.localize(datetime.utcfromtimestamp(parsed_json['results'][i]['time']//1000))
-            ist_dt = utc_dt.astimezone(timezone('Asia/Kolkata'))
-            try:
-                venue = parsed_json['results'][i]['venue']['name']
-            except Exception as e:
-                print(e)
-                venue = 'Location unavailable'
-            text = ('Meetup Name: ' + parsed_json['results'][i]['name'] + '\n' +
-                    'Location: ' + venue + '\n' +
-                    'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +
-                    'RSVP Here: ' + parsed_json['results'][i]['event_url'])
-            send_updates(chat_id, text)
-    else:
-        send_updates(chat_id, 'There are no new Meetups scheduled :(')
-
-
-def get_inline_hydpy_meetup():
-    response = requests.get('https://api.meetup.com/2/events?offset=0&format=json&limited_events=False'
-                            '&group_urlname=Hyderabad-Python-Meetup-Group&photo-host=public&page=20&fields=&order=time'
-                            '&desc=false&status=upcoming&sig_id=8101615&sig=47907134e718c42220aa2e8a7de154be8757318b')
-    parsed_json = json.loads(response.text)
-    meetup_details = []
-    if len(parsed_json['results']) > 0:
-        for i in range(len(parsed_json['results'])):
-            utc_dt = utc.localize(datetime.utcfromtimestamp(parsed_json['results'][i]['time']//1000))
-            ist_dt = utc_dt.astimezone(timezone('Asia/Kolkata'))
-            try:
-                venue = parsed_json['results'][i]['venue']['name']
-            except Exception as e:
-                print(e)
-                venue = 'Location unavailable'
-            text = ('Meetup Name: ' + parsed_json['results'][i]['name'] + '\n' +
-                    'Location: ' + venue + '\n' +
-                    'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +
-                    'RSVP Here: ' + parsed_json['results'][i]['event_url'])
-            meetup_details.append({'meetname': parsed_json['results'][i]['name'],
-                                   'location': venue,
-                                   'time': str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')),
-                                   'url': parsed_json['results'][i]['event_url'],
-                                   'text': text})
-    return meetup_details
-
-
 def prt_recd_from(data, method, query):
     try:
         from_id = data['from']['username']
@@ -133,36 +84,104 @@ def prt_sent_to(from_id, method, action):
     return
 
 
+def meetup_api(group_name=None):
+    if group_name is not None:
+        group_urlname = meetup_dict[group_name]
+        response = requests.get(r'https://api.meetup.com/{group_urlname}/events'
+                                '?&sign=true&photo-host=public&page=20'.format(**locals()))
+        parsed_json = json.loads(response.text)
+        meetup_list = []
+        if len(parsed_json) > 0:
+            for i in range(len(parsed_json)):
+                utc_dt = utc.localize(datetime.utcfromtimestamp(parsed_json[i]['time']//1000))
+                ist_dt = utc_dt.astimezone(timezone('Asia/Kolkata'))
+                try:
+                    venue = parsed_json[i]['venue']['name']
+                except Exception as e:
+                    print(e)
+                    venue = 'Location unavailable'
+                text = ('Meetup Name: ' + parsed_json[i]['name'] + '\n' +
+                        'Location: ' + venue + '\n' +
+                        'Time: ' + str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')) + '\n' +
+                        'RSVP Here: ' + parsed_json[i]['link'])
+                meetup_list.append({'name': parsed_json[i]['name'],
+                                    'location': venue,
+                                    'time': str(ist_dt.strftime('%I:%M %p, %b %d,%Y (%Z)')),
+                                    'url': parsed_json[i]['link'],
+                                    'going': parsed_json[i]['yes_rsvp_count'],
+                                    'who': parsed_json[i]['group']['who'],
+                                    'groupname': parsed_json[i]['group']['name'],
+                                    'text': text},)
+        return meetup_list
+    return
+
+
+def send_inline_meetups(meetup_list, inline_query_id, from_id):
+    results = []
+    if len(meetup_list) > 0:
+        for u_id, meetup in enumerate(meetup_list):
+            results.append({'type': 'article',
+                            'id': u_id,
+                            'title': meetup['name'],
+                            'parse_mode': 'Markdown',
+                            'message_text': meetup['text'],
+                            'description': '{} {} are going'.format(meetup['going'], meetup['who'])})
+        answer = {'inline_query_id': inline_query_id, 'results': json.dumps(results), 'cache_time': '30'}
+        send_inline(answer)
+        prt_sent_to(from_id, 'inline_query', meetup_list[0]['groupname'] + ' Meetup Details')
+    else:
+        results.append({'type': 'article',
+                        'id': 0,
+                        'title': 'No Meetups scheduled in this group',
+                        'parse_mode': 'Markdown',
+                        'message_text': 'No Meetups scheduled in this group',
+                        'description': 'Check again later'})
+        answer = {'inline_query_id': inline_query_id, 'results': json.dumps(results), 'cache_time': '30'}
+        send_inline(answer)
+        prt_sent_to(from_id, 'inline_query',  ' No meetups scheduled')
+    return
+
+
+def send_chat_meetups(meetup_list, chat_id, from_id):
+    if len(meetup_list) > 0:
+        send_updates(chat_id, 'I noticed ' + str(len(meetup_list)) + ' Meetups')
+        for meetup in meetup_list:
+            send_updates(chat_id, meetup['text'])
+        prt_sent_to(from_id, 'message', meetup_list[0]['groupname'] + ' Meetup Details')
+    else:
+        send_updates(chat_id, 'There are no new Meetups scheduled :(')
+        prt_sent_to(from_id, 'message', ' No meetups scheduled')
+    return
+
+
+def process_meetups(query, query_type, send_id, from_id):
+    if query in meetup_dict:
+        meetup_list = meetup_api(query)
+        if query_type == 'inline':
+            send_inline_meetups(meetup_list, send_id, from_id)
+        elif query_type == 'chat':
+            send_chat_meetups(meetup_list, send_id, from_id)
+    else:
+        return None
+    return True
+
+
 def commander(updates):
     for update in updates['result']:
         if 'inline_query' in update:
             inline_query = update['inline_query']
             inline_query_id = inline_query['id']
-            query = inline_query['query']
+            query = inline_query['query'].lower().strip('/')
             from_id = prt_recd_from(inline_query, 'inline_query', query)
-            if re.search('hydpy', query, re.IGNORECASE):
-                meetup_list = get_inline_hydpy_meetup()
-                results = []
-                for u_id, meetup in enumerate(meetup_list):
-                    results.append({'type': 'article',
-                                    'id': u_id,
-                                    'title': meetup['meetname'],
-                                    'parse_mode': 'Markdown',
-                                    'message_text': meetup['text'],
-                                    'description': meetup['url']})
-                answer = {'inline_query_id': inline_query_id, 'results': json.dumps(results), 'cache_time': '30'}
-                send_inline(answer)
-                prt_sent_to(from_id, 'inline_query', 'HydPy Meetup Details')
+            process_meetups(query, 'inline', inline_query_id, from_id)
         else:
             try:
                 message = update['message']
                 chat_id = message['chat']['id']
-                query = message['text']
+                query = message['text'].strip('/')
                 from_id = prt_recd_from(message, 'message', query)
-                if re.search('hydpy', query, re.IGNORECASE):
-                    get_hydpy_meetup(chat_id)
-                    prt_sent_to(from_id, 'message', 'HydPy Meetup Details')
-                else:
+                check = process_meetups(query, 'chat', chat_id, from_id)
+                if check is None:
                     echo_all(updates)
             except Exception as e:
                 print(e)
@@ -183,12 +202,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# if len(parsed_content['result'])>0:
-#     for i in parsed_content['result']:
-#         if parsed_content['result'][0]['message']['from']['username'] not in temp_user_list:
-#             temp_user_list.append(parsed_content['result'][0]['message']['from']['username'])
-#             first_name = parsed_content['result'][0]['message']['from']['first_name']
-#             send_text='Hello {first_name}'.format(**locals())
-#             send_updates(parsed_content['result'][0]['message']['chat']['id'],send_text)
-#         send_updates(parsed_content['result'][0]['message']['chat']['id'],'Howdy!')
