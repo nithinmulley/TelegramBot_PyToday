@@ -143,7 +143,6 @@ def send_inline_meetups(meetup_list, inline_query_id, from_id):
 
 
 def send_chat_meetups(meetup_list, chat_id, from_id):
-    print (meetup_list, chat_id, from_id)
     if len(meetup_list) > 0:
         send_updates(chat_id, 'I noticed ' + str(len(meetup_list)) + ' Meetups')
         print (meetup_list)
