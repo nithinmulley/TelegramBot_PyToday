@@ -144,7 +144,7 @@ def send_inline_meetups(meetup_list, inline_query_id, from_id):
 
 def send_chat_meetups(meetup_list, chat_id, from_id):
     if len(meetup_list) > 0:
-        send_updates(chat_id, 'I noticed ' + str(len(meetup_list)) + ' Meetups')
+        send_updates(chat_id, 'I noticed ' + str(len(meetup_list)) + ' Meetup' + ('s' if len(meetup_list)>1 else ''))
         for meetup in meetup_list:
             send_updates(chat_id, meetup['text'].replace('&','%26'))
         prt_sent_to(from_id, 'message', meetup_list[0]['groupname'] + ' Meetup Details')
